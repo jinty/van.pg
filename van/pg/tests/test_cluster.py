@@ -3,7 +3,7 @@ import doctest
 import os
 from testresources import ResourcedTestCase, OptimisingTestSuite
 
-from van.postgres import DatabaseManager
+from van.pg import DatabaseManager
 import psycopg2
 
 def init_db(db):
@@ -39,6 +39,7 @@ class TestTemplateDB(ResourcedTestCase):
         self.assertEquals(cur.fetchall(), [(1, )])
         
     test_wrapper_isolation_repeat = test_wrapper_isolation # repeat test to check isolation
+        
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()

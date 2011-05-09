@@ -1,2 +1,2 @@
 # Public API
-from van.postgres._cluster import Cluster, DatabaseManager
+from van.pg._cluster import Cluster, DatabaseManager

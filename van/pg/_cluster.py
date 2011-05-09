@@ -8,6 +8,7 @@ import errno
 import shutil
 import tempfile
 from subprocess import Popen, STDOUT, PIPE
+
 from testresources import TestResourceManager
 
 def _pg_run(args, env=None, stdout=PIPE):
@@ -144,12 +145,10 @@ class RunningCluster:
         args = ['createdb', '-h', self.host, dbname]
         if template is not None:
             args.extend(['--template', template])
-        #print 'CREATING: ', dbname
         _pg_run(args)
         return dbname
 
     def dropdb(self, dbname):
-        #print 'DROPPING: ', dbname
         if self._is_bg_thread is not None and dbname in self._db_preload:
             # we are dropping a template, let's wait till our possible background thread is finished
             self._is_bg_thread.join() # make very sure the current bg thread is finished
@@ -198,7 +197,7 @@ class RunningClusterResource(TestResourceManager):
         return RUNNING_CLUSTER
 
 
-_test_db = os.environ.get('VAN_POSTGRES_TESTDB', None)
+_test_db = os.environ.get('VAN_PG_HOST', None)
 if _test_db is not None:
     # If a VAN_POSTGRES_TESTDB environmet variable exists, that is used as the database to connect to.
     RUNNING_CLUSTER = RunningCluster(_test_db)
@@ -246,7 +245,6 @@ class Database(object):
     @property
     def host(self):
         return self.cluster.host
-
 
 class DatabaseManager(TestResourceManager):
 
