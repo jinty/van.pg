@@ -1,5 +1,7 @@
-Test Postgres Databases
-=======================
+Test PostgreSQL Databases
+=========================
+
+Easy creation of PostgreSQL databases (and clusters) for unit testing.
 
 Dirty Databases
 ---------------
@@ -10,7 +12,7 @@ careful when you decide to delete/recreate a test database fixture.
 Also, there seems to be no robust way in PostgreSQL of figuring out if a
 database was committed to or not.
 
-So van.pg has no choice but to place the responsibility on the user to notify
+So van.pg has no choice but to place the responsibility on the you to notify
 it when a database is dirty.  If this isn't done properly, test isolation will
 be compromised.  It's not ideal, but the best we can do.
 
@@ -181,3 +183,10 @@ And cleanup:
     True
     >>> os.path.exists(dbdir)
     False
+
+Development
+-----------
+
+Development takes place on GitHub:
+
+    http://github.com/jinty/van.pg

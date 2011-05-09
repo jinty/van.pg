@@ -5,7 +5,7 @@ _here = os.path.dirname(__file__)
 README = open(os.path.join(_here, 'van', 'pg', 'README.txt'), 'r').read()
 
 setup(name="van.pg",
-      version="1.0",
+      version="1.1",
       description="Tools to programmatically manage PostgreSQL clusters as Python test fixtures.",
       packages=find_packages(),
       long_description=README,
