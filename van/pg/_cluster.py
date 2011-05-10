@@ -107,6 +107,8 @@ class RunningCluster:
         self.host = host
         self._db_preload = {}
         self._is_bg_thread = None
+        args = ['psql', '-h', self.host, '-c', 'SELECT datname FROM pg_catalog.pg_database;', '-t', '-A', 'postgres']
+        self._existing_dbs = _pg_run(args).splitlines()
 
     def createdb(self, template=None):
         assert template is None or template.startswith('test_db'), template
@@ -117,49 +119,61 @@ class RunningCluster:
         except IndexError:
             dbname = None
         if dbname is None:
-            dbname = self._createdb(template)
+            dbname = self._next_dbname()
+            self._createdb(dbname, template)
         if len(dbs) <= self._max_prepared and template is not None and \
                 (self._is_bg_thread is None or not self._is_bg_thread.isAlive()):
             # NOTE: we only prepare templated databases as we can 
             if self._is_bg_thread is not None:
                 self._is_bg_thread.join() # make very sure the current bg thread is finished
-            self._is_bg_thread = threading.Thread(target=self._preload, args=(template, ))
+            preload_dbname = self._next_dbname()
+            if template not in self._db_preload:
+                self._db_preload[template] = []
+            self._is_bg_thread = threading.Thread(target=self._preload, args=(preload_dbname, template, ))
             self._is_bg_thread.start()
         return dbname
 
-    def _preload(self, template):
+    def _preload(self, dbname, template):
         # run in a thread to create the next DB while we run this test
-        dbname = self._createdb(template)
-        self._db_preload.setdefault(template, []).append(dbname)
+        self._createdb(dbname, template)
+        self._db_preload[template].append(dbname)
         self._is_bg_running = False
 
-    def _createdb(self, template):
-        # CAREFUL!!! can be run inside a thread
+    def _next_dbname(self):
+        # remove database from previously failed run, if necessary
         self._db_counter += 1
         dbname = 'test_db%s' % self._db_counter
-        # remove database from previously failed run, if necessary
-        args = ['psql', '-h', self.host, '-c', 'SELECT datname FROM pg_catalog.pg_database;', '-t', '-A', 'postgres']
-        dbs = _pg_run(args).splitlines()
-        if dbname in dbs:
+        if dbname in self._existing_dbs:
             self.dropdb(dbname)
+        return dbname
+
+    def _createdb(self, dbname, template):
+        # CAREFUL!!! can be run inside a thread
         args = ['createdb', '-h', self.host, dbname]
         if template is not None:
             args.extend(['--template', template])
         _pg_run(args)
-        return dbname
 
     def dropdb(self, dbname):
-        if self._is_bg_thread is not None and dbname in self._db_preload:
-            # we are dropping a template, let's wait till our possible background thread is finished
-            self._is_bg_thread.join() # make very sure the current bg thread is finished
+        if dbname in self._db_preload:
+            # we are dropping a template
+            if self._is_bg_thread is not None:
+                self._is_bg_thread.join() # make very sure the current bg thread is finished
             # drop any prepared dbs we have for that template
             while self._db_preload[dbname]:
                 self.dropdb(self._db_preload[dbname].pop())
+            del self._db_preload[dbname]
         args = ['dropdb', '-h', self.host, dbname]
         _pg_run(args)
 
     def cleanup(self):
-        pass
+        # wait till our background thread finishes
+        if self._is_bg_thread is not None:
+            self._is_bg_thread.join() # make very sure the current bg thread is finished
+        # drop all the preloaded dbs we have around
+        for dbname in  self._db_preload:
+            while self._db_preload[dbname]:
+                self.dropdb(self._db_preload[dbname].pop())
 
 class _Synch(object):
     """Dirties it's layer every time a transaction is succesfully committed."""
