@@ -1,2 +1,2 @@
-*.txt
-van/pg/*.txt
+include *.txt
+include van/pg/*.txt
