@@ -181,6 +181,9 @@ class _Synch(object):
     def __init__(self, func):
         self.func = func
 
+    def afterCommitHook(self, status):
+        self.func()
+
     def beforeCompletion(self, txn):
         pass
 
@@ -188,7 +191,7 @@ class _Synch(object):
         pass
 
     def afterCompletion(self, txn):
-        txn.addAfterCommitHook(self.func)
+        txn.addAfterCommitHook(self.afterCommitHook)
 
 class ClusterResource(TestResourceManager):
 
