@@ -17,7 +17,7 @@ def _pg_run(args, env=None, stdout=PIPE):
         stdout, _ = p.communicate()
         if p.returncode != 0:
             raise Exception("command failed: %s\nOUTPUT:\n%s" % (' '.join(args), stdout))
-    except OSError, exc:
+    except OSError as exc:
         if exc.errno != errno.ENOENT:
             raise
         # carefully convert a common exception message into something more informative

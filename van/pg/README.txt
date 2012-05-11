@@ -49,7 +49,7 @@ The typical way to use these fixtures is via ``testresources``
     ...         conn.commit()
     ...         cur = conn.cursor()
     ...         cur.execute("SELECT * FROM foo")
-    ...         self.assertEquals(cur.fetchall(), [(1, )])
+    ...         self.assertEqual(cur.fetchall(), [(1, )])
     ...         # NOTE: must close connections or dropping databases fails
     ...         conn.close()
     ...         self.db.dirtied() # we changed the DB, so it needs re-loading

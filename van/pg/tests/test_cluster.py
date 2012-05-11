@@ -1,3 +1,4 @@
+from __future__ import print_function
 import unittest
 import doctest
 import os
@@ -43,7 +44,7 @@ class TestTemplateDB(ResourcedTestCase):
         self.assertTrue(self.resources[0][1].isDirty())
         cur = self.conn.cursor()
         cur.execute("SELECT * FROM foo")
-        self.assertEquals(cur.fetchall(), [(1, )])
+        self.assertEqual(cur.fetchall(), [(1, )])
         
     test_wrapper_isolation_repeat = test_wrapper_isolation # repeat test to check isolation
 
@@ -55,7 +56,7 @@ class TestDirtyOnCommit(ResourcedTestCase):
 
     def test_transaction_commit_dirties(self):
         if transaction is None:
-            print "Skipping test requiring transaction"
+            print("Skipping test requiring transaction")
         dbm_to_dirty = self.resources[0][1]
         dbm_keep_clean = self.resources[1][1]
         self.assertFalse(dbm_to_dirty.isDirty())
