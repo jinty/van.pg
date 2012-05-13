@@ -1,0 +1,11 @@
+CHANGES
+=======
+
+2.0 (unreleased)
+----------------
+
+* Support Python 3.2.
+
+* Drop Python 2.5 support.
+
+* Add tox.ini for testing against multiple python versions.
