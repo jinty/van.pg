@@ -9,3 +9,7 @@ CHANGES
 * Drop Python 2.5 support.
 
 * Add tox.ini for testing against multiple python versions.
+
+* Run PostgreSQL as a subprocess rather than as a daemon (via pg_ctl).
+
+* Re-organize code to improve reuse and test coverage.

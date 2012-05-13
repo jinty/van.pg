@@ -2,6 +2,8 @@
 """
 
 import os
+import signal
+import time
 import threading
 import gc
 import errno
@@ -23,90 +25,24 @@ def _pg_run(args, env=None, stdout=PIPE):
         # carefully convert a common exception message into something more informative
         raise Exception("""Could not find the binary %s. This is probably because
 postgresql executables are not on the path.Try setting the PATH variable
-to include the postgresql executables. On Debian Linux with PostgreSQL this
-you could run PATH=/usr/lib/postgresql/8.3/bin:$PATH""" % args[0])
+to include the postgresql executables. On Debian Linux with PostgreSQL
+you could run PATH=/usr/lib/postgresql/X.Y/bin:$PATH""" % args[0])
     return stdout
 
-class Cluster(object):
-    """This is an object that manages a postgres cluster.
 
-    The cluster is created in a temporary directory.
-    """
-
-    dbdir = None
-    started = False
-    _db_counter = 0
-
-    @property
-    def host(self):
-        return self.dbdir
-
-    def initdb(self):
-        assert self.dbdir is None
-        # setup template
-        dbdir = tempfile.mkdtemp()
-        new_env = os.environ.copy()
-        new_env['PGOPTIONS'] = '-F'
-        _pg_run(['initdb', '-E', 'utf-8', '-D', dbdir, '-A', 'trust'], env=new_env)
-        self.dbdir = dbdir
-
-    def cleanup(self):
-        if self.started:
-            self.stop()
-        if self.dbdir is not None:
-            shutil.rmtree(self.dbdir)
-            self.dbdir = None
-
-    def __del__(self):
-        self.cleanup()
-
-    def start(self):
-        assert not self.started
-        assert self.dbdir is not None
-        new_env = os.environ.copy()
-        new_env['PGHOST'] = self.dbdir
-        args = ['pg_ctl', 'start', '-w', '-t', '10', '-s', '-D', self.dbdir,
-                '-o', "-k %s -F -h '' --log_min_messages=FATAL" % self.dbdir]
-        _pg_run(args, env=new_env, stdout=None) # fails with stdout=PIPE, never returns
-        self.started = True
-
-    def stop(self):
-        assert self.started
-        os.environ.copy()
-        new_env = os.environ.copy()
-        new_env['PGHOST'] = self.dbdir
-        args = ['pg_ctl', 'stop', '-w', '-m', 'fast', '-s', '-D', self.dbdir]
-        _pg_run(args, env=new_env)
-        self.started = False
-
-    def createdb(self, template=None):
-        assert self.started
-        self._db_counter += 1
-        dbname = 'test_db%s' % self._db_counter
-        args = ['createdb', '-h', self.dbdir, dbname]
-        if template is not None:
-            args.extend(['--template', template])
-        _pg_run(args)
-        return dbname
-
-    def dropdb(self, dbname):
-        assert self.started
-        args = ['dropdb', '-h', self.dbdir, dbname]
-        _pg_run(args)
-
-class RunningCluster:
+class RunningCluster(object):
     """Representing an extranal cluster that cannot be stopped/started/inited.
-    
+
     Basically, you can point this at an already running database to save time initing the database.
     """
 
     _db_counter = 0
     _max_prepared = 1
+    _is_bg_thread = None
 
     def __init__(self, host):
         self.host = host
         self._db_preload = {}
-        self._is_bg_thread = None
         args = ['psql', '-h', self.host, '-c', 'SELECT datname FROM pg_catalog.pg_database;', '-t', '-A', 'postgres']
         self._existing_dbs = _pg_run(args).splitlines()
 
@@ -123,7 +59,7 @@ class RunningCluster:
             self._createdb(dbname, template)
         if len(dbs) <= self._max_prepared and template is not None and \
                 (self._is_bg_thread is None or not self._is_bg_thread.isAlive()):
-            # NOTE: we only prepare templated databases as we can 
+            # NOTE: we only prepare templated databases if we can
             if self._is_bg_thread is not None:
                 self._is_bg_thread.join() # make very sure the current bg thread is finished
             preload_dbname = self._next_dbname()
@@ -174,6 +110,83 @@ class RunningCluster:
         for dbname in  self._db_preload:
             while self._db_preload[dbname]:
                 self.dropdb(self._db_preload[dbname].pop())
+
+    def __del__(self):
+        self.cleanup()
+
+
+class Cluster(RunningCluster):
+    """This is an object that manages a postgres cluster.
+
+    The cluster is created in a temporary directory.
+    """
+
+    dbdir = None
+    _postmaster = None
+    _db_counter = 0
+    _existing_dbs = ()
+
+    def __init__(self):
+        self._db_preload = {}
+
+    @property
+    def host(self):
+        return self.dbdir
+
+    @property
+    def started(self):
+        return self._postmaster is not None
+
+    def initdb(self):
+        assert self.dbdir is None
+        # setup template
+        dbdir = tempfile.mkdtemp()
+        new_env = os.environ.copy()
+        new_env['PGOPTIONS'] = '-F'
+        _pg_run(['initdb', '-E', 'utf-8', '-D', dbdir, '-A', 'trust'], env=new_env)
+        self.dbdir = dbdir
+
+    def cleanup(self):
+        super(Cluster, self).cleanup()
+        if self._postmaster is not None:
+            self.stop()
+        if self.dbdir is not None:
+            shutil.rmtree(self.dbdir)
+            self.dbdir = None
+
+    def start(self):
+        assert self._postmaster is None
+        assert self.dbdir is not None
+        args = ['postgres', '-D', self.dbdir, '-k', self.dbdir, '-F', '-h', '', '--log_min_messages=PANIC']
+        self._postmaster = Popen(args)
+        timeout = 10 # seconds
+        for i in range(timeout * 20):
+            try:
+                time.sleep(0.05)
+                self._postmaster.poll()
+                if self._postmaster.returncode is not None:
+                    raise Exception("Postmaster died unexpectedly")
+                args = ['psql', '-h', self.host, '-c', "SELECT 'YAY';", '-t', '-A', 'postgres']
+                p = Popen(args, stdout=PIPE, stderr=PIPE)
+                result, psql_err = p.communicate()
+                if p.returncode == 0 and b'YAY' in result:
+                    break # success
+            except:
+                self.stop()
+                raise
+        else:
+            self.stop()
+            raise Exception('Timed out connecting to postgres: %s' % psql_err)
+
+    def stop(self):
+        assert self._postmaster is not None
+        self._postmaster.poll()
+        if self._postmaster.returncode is None:
+            # http://www.postgresql.org/docs/9.1/static/server-shutdown.html
+            self._postmaster.send_signal(signal.SIGQUIT)
+            self._postmaster.wait()
+        self._postmaster = None
+
 
 class _Synch(object):
     """Dirties it's layer every time a transaction is succesfully committed."""
