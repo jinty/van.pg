@@ -5,6 +5,11 @@ _here = os.path.dirname(__file__)
 README = open(os.path.join(_here, 'van', 'pg', 'README.txt'), 'r').read()
 CHANGES = open(os.path.join(_here, 'CHANGES.txt'), 'r').read()
 
+import platform
+psycopg2_dep = 'psycopg2'
+if platform.python_implementation() == 'PyPy':
+    psycopg2_dep = 'psycopg2cffi-compat'
+
 setup(name="van.pg",
       version="2.0",
       description="Tools to programmatically manage PostgreSQL clusters as Python test fixtures.",
@@ -31,7 +36,7 @@ setup(name="van.pg",
           "Programming Language :: Python :: 3.2",
           ],
       tests_require=[
-          'psycopg2',
+          psycopg2_dep,
           'transaction',
           ],
       test_suite='van.pg.tests',
